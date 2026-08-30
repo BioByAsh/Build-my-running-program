@@ -1,4 +1,3 @@
-
 /**
  * Receives Gumroad's Ping webhook on every sale.
  * Set in Gumroad: Settings -> Advanced -> Ping URL
