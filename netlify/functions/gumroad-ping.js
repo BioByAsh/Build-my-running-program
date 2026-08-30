@@ -1,36 +1,33 @@
 /**
  * Receives Gumroad's Ping webhook on every sale.
- * Set in Gumroad: Settings -> Advanced -> Ping URL
- * URL: https://myrunningtraining.netlify.app/.netlify/functions/gumroad-ping
+ * Stores session → paid in Upstash Redis so the browser can detect it.
+ * No npm packages needed - uses Upstash's REST API with fetch.
  */
-exports.handler = async (event, context) => {
+exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: 'Method Not Allowed' };
   }
 
   const params = new URLSearchParams(event.body || '');
   const permalink = params.get('product_permalink');
-  console.log('Ping received. permalink:', permalink, 'keys:', [...params.keys()].join(','));
+  console.log('Ping received. permalink:', permalink);
 
-  // Accept our product or test pings (test field = true)
-  if (permalink !== 'woksrk') {
-    console.log('Not our product, ignoring');
+  if (!permalink || !permalink.includes('woksrk')) {
     return { statusCode: 200, body: 'OK' };
   }
 
-  // Extract the session_id we attached to the checkout URL
+  // Extract the session_id we embedded in the checkout URL
   let sessionId = null;
   const urlParamsRaw = params.get('url_params');
-  console.log('url_params raw:', urlParamsRaw);
+  console.log('url_params:', urlParamsRaw);
 
   if (urlParamsRaw) {
     try {
-      // Gumroad may or may not URI-encode url_params — handle both
       let parsed;
       try { parsed = new URLSearchParams(decodeURIComponent(urlParamsRaw)); }
       catch(e) { parsed = new URLSearchParams(urlParamsRaw); }
       sessionId = parsed.get('session_id');
-    } catch (e) { console.error('url_params parse error:', e.message); }
+    } catch(e) { console.error('Parse error:', e.message); }
   }
 
   console.log('session_id:', sessionId);
@@ -39,14 +36,16 @@ exports.handler = async (event, context) => {
     return { statusCode: 200, body: 'OK - no session_id' };
   }
 
+  // Store in Upstash Redis via REST API, expires after 1 hour
   try {
-    // Pass lambda context so Netlify Blobs knows which site/deployment to use
-    const store = getStore({ name: 'biopoint-sessions', context });
-    await store.setJSON(sessionId, { paid: true, ts: Date.now() });
-    console.log('Payment stored for session:', sessionId);
-  } catch (e) {
-    console.error('Blobs store error:', e.message);
-    // Still return 200 so Gumroad does not retry indefinitely
+    const res = await fetch(
+      process.env.UPSTASH_URL + '/set/' + encodeURIComponent(sessionId) + '/paid/ex/3600',
+      { headers: { Authorization: 'Bearer ' + process.env.UPSTASH_TOKEN } }
+    );
+    const result = await res.json();
+    console.log('Stored. Upstash response:', JSON.stringify(result));
+  } catch(e) {
+    console.error('Upstash error:', e.message);
   }
 
   return { statusCode: 200, body: 'OK' };
