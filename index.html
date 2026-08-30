@@ -1254,7 +1254,7 @@ window.addEventListener('pageshow', ()=> checkOnce());
 // Pay button: opens Gumroad in a popup. On mobile this often opens a new tab.
 // Either way, answers stay in memory on this page and polling detects the payment.
 document.getElementById('gumroadBtn').addEventListener('click', ()=>{
-  const url = 'https://ashgill8.gumroad.com/l/woksrk?wanted=true&session_id=' + encodeURIComponent(SESSION_ID);
+  const url = 'https://ashgill8.gumroad.com/l/woksrk?session_id=' + encodeURIComponent(SESSION_ID);
   const w = 500, h = 700;
   const left = Math.max(0, (screen.width - w) / 2);
   const top  = Math.max(0, (screen.height - h) / 2);
