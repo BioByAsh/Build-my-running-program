@@ -1,28 +1,30 @@
 /**
- * Polled by the browser every 3 seconds after the user clicks Pay.
- * Checks Upstash Redis for payment confirmation.
- * No npm packages needed - uses Upstash's REST API with fetch.
+ * Polled by the browser after the user clicks Pay.
+ * Returns { paid: true } if a confirmed sale happened after the user clicked Pay.
  */
 exports.handler = async (event) => {
   const headers = { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' };
-  const sessionId = event.queryStringParameters && event.queryStringParameters.session;
+  const clickTime = parseInt(event.queryStringParameters?.clickTime || '0', 10);
 
-  if (!sessionId) {
+  if (!clickTime) {
     return { statusCode: 200, headers, body: JSON.stringify({ paid: false }) };
   }
 
   try {
     const res = await fetch(
-      process.env.UPSTASH_URL + '/get/' + encodeURIComponent(sessionId),
+      process.env.UPSTASH_URL + '/get/latest_sale',
       { headers: { Authorization: 'Bearer ' + process.env.UPSTASH_TOKEN } }
     );
     const data = await res.json();
-    const paid = data.result === 'paid';
+    const saleTime = parseInt(data.result || '0', 10);
+    console.log('clickTime:', clickTime, 'saleTime:', saleTime);
+
+    const paid = saleTime > clickTime;
 
     if (paid) {
-      // Delete after confirming - one-time use token
+      // Delete so this sale can't unlock a different session
       fetch(
-        process.env.UPSTASH_URL + '/del/' + encodeURIComponent(sessionId),
+        process.env.UPSTASH_URL + '/del/latest_sale',
         { headers: { Authorization: 'Bearer ' + process.env.UPSTASH_TOKEN } }
       ).catch(() => {});
     }
