@@ -1,16 +1,10 @@
-const { getStore } = require('@netlify/blobs');
-
 /**
  * Polled by the browser every 3 seconds after the user clicks Pay.
- * Returns { paid: true } once the Gumroad Ping has been stored.
- * URL: /.netlify/functions/check-payment?session=SESSION_ID
+ * Checks Upstash Redis for payment confirmation.
+ * No npm packages needed - uses Upstash's REST API with fetch.
  */
-exports.handler = async (event, context) => {
-  const headers = {
-    'Content-Type': 'application/json',
-    'Cache-Control': 'no-store',
-  };
-
+exports.handler = async (event) => {
+  const headers = { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' };
   const sessionId = event.queryStringParameters && event.queryStringParameters.session;
 
   if (!sessionId) {
@@ -18,24 +12,24 @@ exports.handler = async (event, context) => {
   }
 
   try {
-    // Pass lambda context so Netlify Blobs knows which site/deployment to use
-    const store = getStore({ name: 'biopoint-sessions', context });
-    let data = null;
+    const res = await fetch(
+      process.env.UPSTASH_URL + '/get/' + encodeURIComponent(sessionId),
+      { headers: { Authorization: 'Bearer ' + process.env.UPSTASH_TOKEN } }
+    );
+    const data = await res.json();
+    const paid = data.result === 'paid';
 
-    try { data = await store.get(sessionId, { type: 'json' }); } catch(e) {
-      // Not found yet - payment not confirmed
-    }
-
-    const paid = data !== null && data.paid === true;
-
-    // Delete after confirming - one-time use token
     if (paid) {
-      try { await store.delete(sessionId); } catch(e) {}
+      // Delete after confirming - one-time use token
+      fetch(
+        process.env.UPSTASH_URL + '/del/' + encodeURIComponent(sessionId),
+        { headers: { Authorization: 'Bearer ' + process.env.UPSTASH_TOKEN } }
+      ).catch(() => {});
     }
 
     return { statusCode: 200, headers, body: JSON.stringify({ paid }) };
-  } catch (e) {
-    console.error('check-payment error:', e.message);
+  } catch(e) {
+    console.error('Upstash error:', e.message);
     return { statusCode: 200, headers, body: JSON.stringify({ paid: false }) };
   }
 };
