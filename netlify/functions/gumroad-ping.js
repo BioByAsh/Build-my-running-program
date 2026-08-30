@@ -1,4 +1,3 @@
-const { getStore } = require('@netlify/blobs');
 
 /**
  * Receives Gumroad's Ping webhook on every sale.
@@ -15,7 +14,7 @@ exports.handler = async (event, context) => {
   console.log('Ping received. permalink:', permalink, 'keys:', [...params.keys()].join(','));
 
   // Accept our product or test pings (test field = true)
-  if (!permalink || !permalink.includes('woksrk')) {
+  if (permalink !== 'woksrk') {
     console.log('Not our product, ignoring');
     return { statusCode: 200, body: 'OK' };
   }
@@ -52,4 +51,4 @@ exports.handler = async (event, context) => {
   }
 
   return { statusCode: 200, body: 'OK' };
-};let parsed;
+};
