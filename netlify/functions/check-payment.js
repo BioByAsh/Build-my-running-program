@@ -1,13 +1,11 @@
 const { getStore } = require('@netlify/blobs');
 
 /**
- * Called by the browser every 3 seconds while the Gumroad popup is open.
- * Returns { paid: true } as soon as the Gumroad Ping has been received.
- * Deletes the entry after confirming so it cannot be replayed.
- *
+ * Polled by the browser every 3 seconds after the user clicks Pay.
+ * Returns { paid: true } once the Gumroad Ping has been stored.
  * URL: /.netlify/functions/check-payment?session=SESSION_ID
  */
-exports.handler = async (event) => {
+exports.handler = async (event, context) => {
   const headers = {
     'Content-Type': 'application/json',
     'Cache-Control': 'no-store',
@@ -19,21 +17,25 @@ exports.handler = async (event) => {
     return { statusCode: 200, headers, body: JSON.stringify({ paid: false }) };
   }
 
-  const store = getStore('biopoint-sessions');
-  let data = null;
-
   try {
-    data = await store.get(sessionId, { type: 'json' });
+    // Pass lambda context so Netlify Blobs knows which site/deployment to use
+    const store = getStore({ name: 'biopoint-sessions', context });
+    let data = null;
+
+    try { data = await store.get(sessionId, { type: 'json' }); } catch(e) {
+      // Not found yet - payment not confirmed
+    }
+
+    const paid = data !== null && data.paid === true;
+
+    // Delete after confirming - one-time use token
+    if (paid) {
+      try { await store.delete(sessionId); } catch(e) {}
+    }
+
+    return { statusCode: 200, headers, body: JSON.stringify({ paid }) };
   } catch (e) {
-    // Entry not found yet - payment not confirmed
+    console.error('check-payment error:', e.message);
+    return { statusCode: 200, headers, body: JSON.stringify({ paid: false }) };
   }
-
-  const paid = data !== null && data.paid === true;
-
-  // Delete after confirming - one-time use
-  if (paid) {
-    try { await store.delete(sessionId); } catch (e) {}
-  }
-
-  return { statusCode: 200, headers, body: JSON.stringify({ paid }) };
 };
