@@ -15,7 +15,7 @@ exports.handler = async (event, context) => {
   console.log('Ping received. permalink:', permalink, 'keys:', [...params.keys()].join(','));
 
   // Accept our product or test pings (test field = true)
-  if (permalink !== 'woksrk') {
+  if (!permalink || !permalink.includes('woksrk')) {
     console.log('Not our product, ignoring');
     return { statusCode: 200, body: 'OK' };
   }
