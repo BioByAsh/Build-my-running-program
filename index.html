@@ -1220,27 +1220,39 @@ function renderTeaser(plan){
 // which browser session to unlock when payment is confirmed.
 const SESSION_ID = 'bp_' + Math.random().toString(36).slice(2, 11) + '_' + Date.now().toString(36);
 let _poll = null;
+let _polling = false;
+
+async function checkOnce(){
+  if (!_polling) return;
+  try {
+    const res = await fetch('/.netlify/functions/check-payment?session=' + encodeURIComponent(SESSION_ID));
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.paid){
+      clearInterval(_poll); _poll = null; _polling = false;
+      const hint = document.getElementById('unlockHint');
+      if (hint) hint.textContent = 'Payment confirmed! Generating your plan...';
+      setTimeout(()=> doUnlock('server-verified'), 600);
+    }
+  } catch(e){ /* network hiccup, keep trying */ }
+}
 
 function startPolling(){
   if (_poll) return;
+  _polling = true;
   const hint = document.getElementById('unlockHint');
   if (hint) hint.textContent = 'Waiting for payment confirmation...';
-  _poll = setInterval(async ()=>{
-    try {
-      const res = await fetch('/.netlify/functions/check-payment?session=' + encodeURIComponent(SESSION_ID));
-      if (!res.ok) return;
-      const data = await res.json();
-      if (data.paid){
-        clearInterval(_poll); _poll = null;
-        if (hint) hint.textContent = 'Payment confirmed! Generating your plan...';
-        setTimeout(()=> doUnlock('server-verified'), 600);
-      }
-    } catch(e){ /* network hiccup, keep polling */ }
-  }, 3000);
+  _poll = setInterval(checkOnce, 3000);
 }
 
-// Pay button: opens Gumroad in a popup (user stays on this page, answers stay in memory)
-// and starts polling for the payment signal from Gumroad Ping.
+// On mobile the background page is throttled when the Gumroad popup/tab is open.
+// When the user returns to this page after paying, poll immediately.
+document.addEventListener('visibilitychange', ()=>{ if (!document.hidden) checkOnce(); });
+window.addEventListener('focus', ()=> checkOnce());
+window.addEventListener('pageshow', ()=> checkOnce());
+
+// Pay button: opens Gumroad in a popup. On mobile this often opens a new tab.
+// Either way, answers stay in memory on this page and polling detects the payment.
 document.getElementById('gumroadBtn').addEventListener('click', ()=>{
   const url = 'https://ashgill8.gumroad.com/l/woksrk?wanted=true&session_id=' + encodeURIComponent(SESSION_ID);
   const w = 500, h = 700;
