@@ -1,0 +1,8 @@
+{
+  "name": "biopoint-training-plan",
+  "version": "1.0.0",
+  "description": "Bio Point personalised running plan generator",
+  "dependencies": {
+    "@netlify/blobs": "^8.0.0"
+  }
+}
