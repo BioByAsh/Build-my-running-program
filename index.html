@@ -1257,12 +1257,16 @@ window.addEventListener('pageshow', ()=> checkOnce());
 // Pay button: record click time, open Gumroad, start polling.
 document.getElementById('gumroadBtn').addEventListener('click', ()=>{
   _clickTime = Date.now();
+  // Save to localStorage so answers survive if customer navigates away and returns via a link
+  try {
+    localStorage.setItem('biopoint_state', JSON.stringify(state));
+    localStorage.setItem('biopoint_clickTime', String(_clickTime));
+  } catch(e) {}
   const url = 'https://ashgill8.gumroad.com/l/woksrk?session_id=' + _clickTime;
   const w = 500, h = 700;
   const left = Math.max(0, (screen.width - w) / 2);
   const top  = Math.max(0, (screen.height - h) / 2);
   window.open(url, 'gumroad_checkout', `width=${w},height=${h},left=${left},top=${top},scrollbars=yes,resizable=yes`);
-  // Update UI to guide customer back after paying
   const hint = document.getElementById('unlockHint');
   if (hint) hint.textContent = 'Complete payment in the Gumroad window, then come back here. Your plan will unlock automatically.';
   const returnBtn = document.getElementById('returnBtn');
@@ -1270,8 +1274,39 @@ document.getElementById('gumroadBtn').addEventListener('click', ()=>{
   startPolling();
 });
 
+// Detect when a customer returns via the Gumroad content page link (?r=1)
+// Restore their answers from localStorage and start polling immediately
+(function checkIfReturning(){
+  const params = new URLSearchParams(window.location.search);
+  if (!params.get('r')) return;
+  window.history.replaceState({}, document.title, window.location.pathname);
+  let restoredState, restoredClickTime;
+  try {
+    const raw = localStorage.getItem('biopoint_state');
+    restoredClickTime = parseInt(localStorage.getItem('biopoint_clickTime') || '0', 10);
+    if (!raw || !restoredClickTime) return;
+    restoredState = JSON.parse(raw);
+    if (restoredState.raceDate) restoredState.raceDate = new Date(restoredState.raceDate);
+  } catch(e) { return; }
+  state = restoredState;
+  _clickTime = restoredClickTime;
+  lastPlan = generatePlan();
+  // Show the teaser/paywall with the return button visible
+  document.getElementById('onboarding').style.display = 'none';
+  document.getElementById('results').classList.add('active');
+  document.getElementById('teaser').style.display = 'block';
+  document.getElementById('fullPlan').style.display = 'none';
+  renderTeaser(lastPlan);
+  const hint = document.getElementById('unlockHint');
+  if (hint) hint.textContent = 'Checking your payment...';
+  const returnBtn = document.getElementById('returnBtn');
+  if (returnBtn) returnBtn.style.display = 'block';
+  startPolling();
+})();
+
 function doUnlock(paymentRef){
   if (_poll){ clearInterval(_poll); _poll = null; }
+  try { localStorage.removeItem('biopoint_state'); localStorage.removeItem('biopoint_clickTime'); } catch(e) {}
   unlocked = true;
   submitLead('paid', paymentRef||'');
   renderResults(lastPlan);
